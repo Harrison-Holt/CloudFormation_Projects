@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  This CloudFormation template provisions a secure static website using a private S3 bucket,
+  CloudFront distribution with Origin Access Identity (OAI), and appropriate bucket policy.
+
+Resources:
+  MyStaticWebsite:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags: 
+        - Key: Name
+          Value: MyStaticWebsite
+  
+  MyOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: Access Identity For The S3 Bucket
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: 
+        Ref: MyStaticWebsite
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: "Allow"
+            Action: "S3:GetObject"
+            Resource: 
+              Fn::Sub: arn:aws:s3:::${MyStaticWebsite}
+            Principal:
+              CanonicalUser:
+                Fn::GetAtt: [MyOAI, S3CanonicalUserId]
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins: 
+          - Id: S3Origin
+            DomainName:
+              Fn::GetAtt: [MyStaticWebsite, RegionalDomainName]
+            S3OriginConfig:
+              OriginAccessIdentity: 
+                Fn::Sub: origin-access-identity/cloudfront/${MyOAI}
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          ForwardedValues:
+            QueryString: false 
+            Cookies:
+              Forward: none
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+              
+              
